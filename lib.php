@@ -24,8 +24,17 @@
 defined('MOODLE_INTERNAL') || die();
 
 function local_messagep_before_footer(){
-    global $DB;
-    $messages = $DB->get_records('local_messagep_message');
+    global $DB, $USER;
+
+    if ($USER->id == 0 || $USER->id == 1) return; //If the user is not logged in he will not see messages
+
+    $sql = 'SELECT lmm.* FROM {local_messagep_message} lmm
+    LEFT JOIN {local_messagep_read} lmr ON lmm.id = lmr.messageid AND lmr.userid = :uid
+    WHERE lmr.id IS NULL';
+
+    $params = ['uid' => $USER->id];
+    $messages = $DB->get_records_sql($sql, $params);
+
     $types = [
         '0' => 'success',
         '1' => 'warning',
@@ -35,5 +44,14 @@ function local_messagep_before_footer(){
     foreach ($messages as $message) {
 
         \core\notification::add($message->text,$types[$message->type]); // or just : 'success'
+        
+        // Mark the message as read in the database (insert to mdl_local_messagep_read):
+        $readrecord = new stdClass();
+        $readrecord->messageid = $message->id;
+        $readrecord->userid = $USER->id;
+        $readrecord->timeread = time();
+
+        $DB->insert_record('local_messagep_read', $readrecord);
     }
+
 }
